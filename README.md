@@ -30,7 +30,7 @@ mix phx.server
 
 # Get and run openseeface
 
-Follow instructions on the (https://github.com/emilianavt/OpenSeeFace?tab=readme-ov-file#usage)[OpenSeeFace repo]
+Follow instructions on the [https://github.com/emilianavt/OpenSeeFace?tab=readme-ov-file#usage](OpenSeeFace repo)
 https://github.com/emilianavt/OpenSeeFace?tab=readme-ov-file#usage
 
 My app expects it to run on port 12000 but this can be changed in the code.
