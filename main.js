@@ -4,6 +4,8 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { Socket } from 'phoenix';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 
+const DEBUG = false;
+
 //utils
 function deg2Rad(degrees) {
   //return degrees * (Math.PI / 180);
@@ -15,7 +17,7 @@ function rad2Deg(r){
 }
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xedfff2);
+scene.background = new THREE.Color(0x00ff00);
 
 //lights
 const ambient = new THREE.AmbientLight(0x222222, 4);
@@ -32,12 +34,6 @@ scene.add(light2);
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.position.set(4, 1, 6);
-
-const geometry = new THREE.BoxGeometry(1, 1, 1);
-const material = new THREE.MeshBasicMaterial({color: 0x00ff00});
-const cube = new THREE.Mesh(geometry, material);
-
-scene.add(cube);
 
 const loader = new GLTFLoader();
 let burgerModel;
@@ -61,36 +57,40 @@ loader.load('./public/hamburger_salaryman_rigged.glb', (gltf) => {
    console.error(error);
 });
 
-// axes helpers
+// visualize axes for debugging
+const labelRenderer = new CSS2DRenderer();
 const trackerHelper = new THREE.AxesHelper(5);
-trackerHelper.setColors(
-  new THREE.Color(0xff8080), // X
-  new THREE.Color(0x80ff80), // Y
-  new THREE.Color(0x8080ff)  // Z
-);
-scene.add(trackerHelper);
-labelAxes(trackerHelper, "trackerHelper");
-
 const correctedHelper = new THREE.AxesHelper(5);
-scene.add(correctedHelper);
-labelAxes(correctedHelper, "correctedHelper");
-
 const normalAxes = new THREE.AxesHelper(30);
-scene.add(normalAxes);
-labelAxes(normalAxes, "normalAxes");
+
+if(DEBUG) {
+  // axes helpers
+  trackerHelper.setColors(
+    new THREE.Color(0xff8080), // X
+    new THREE.Color(0x80ff80), // Y
+    new THREE.Color(0x8080ff)  // Z
+  );
+  scene.add(trackerHelper);
+  labelAxes(trackerHelper, "trackerHelper");
+
+  scene.add(correctedHelper);
+  labelAxes(correctedHelper, "correctedHelper");
+
+  scene.add(normalAxes);
+  labelAxes(normalAxes, "normalAxes");
+
+  // Add CSS2DRenderer
+  labelRenderer.setSize(window.innerWidth, window.innerHeight);
+  labelRenderer.domElement.style.position = 'absolute';
+  labelRenderer.domElement.style.top = '0';
+  labelRenderer.domElement.style.pointerEvents = 'none';
+  document.body.appendChild(labelRenderer.domElement);
+}
 
 // webgl renderer
 const renderer = new THREE.WebGLRenderer();
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
-
-// Add CSS2DRenderer
-const labelRenderer = new CSS2DRenderer();
-labelRenderer.setSize(window.innerWidth, window.innerHeight);
-labelRenderer.domElement.style.position = 'absolute';
-labelRenderer.domElement.style.top = '0';
-labelRenderer.domElement.style.pointerEvents = 'none';
-document.body.appendChild(labelRenderer.domElement);
 
 // controls
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -104,9 +104,6 @@ const correction = new THREE.Quaternion()
   .setFromEuler(
     new THREE.Euler(
       deg2Rad(180), 0, deg2Rad(-90)
-      // correct orientation, but pitch/yaw is reversed
-      //deg2Rad(180), 0, deg2Rad(-90)
-      //-Math.PI, 0, -Math.PI / 2
     )
   );
 
@@ -155,34 +152,32 @@ function showQuats(trackerQuat) {
   // place helpers at headBone world position
   const pos = new THREE.Vector3();
   headBone.getWorldPosition(pos);
-  trackerHelper.position.copy(pos);
-  correctedHelper.position.copy(pos);
 
-  // tracker orientation (as raw from OSF)
-  trackerHelper.setRotationFromQuaternion(trackerQuat);
+  if(DEBUG) {
+    trackerHelper.position.copy(pos);
+    correctedHelper.position.copy(pos);
 
-  // corrected orientation
-  const corr = new THREE.Quaternion().copy(correction).multiply(trackerQuat).normalize();
-  correctedHelper.setRotationFromQuaternion(corr);
+    // tracker orientation (as raw from OSF)
+    trackerHelper.setRotationFromQuaternion(trackerQuat);
+
+    // corrected orientation
+    const corr = new THREE.Quaternion().copy(correction).multiply(trackerQuat).normalize();
+    correctedHelper.setRotationFromQuaternion(corr);
+  }
 }
 
 const animate = () => {
-  cube.rotation.x += 0.01;
-  cube.rotation.y += 0.01;
-  cube.rotation.z += 0.01;
-
-  //currentQuat.copy(targetQuat);
   currentQuat.slerp(targetQuat, slerpFactor);
   headBone.quaternion.copy(currentQuat);
-  //
-    //
-    //
-  if(trackerQuaternion) {
-    showQuats(trackerQuaternion);
+
+  if(DEBUG) {
+    if(trackerQuaternion) {
+      showQuats(trackerQuaternion);
+    }
+    labelRenderer.render(scene, camera);
   }
   controls.update();
   renderer.render(scene, camera);
-  labelRenderer.render(scene, camera);
 }
 
 let socket = new Socket("http://localhost:4000/socket")
@@ -194,22 +189,10 @@ channel.join()
   .receive("error", () => console.log("Failed to join OSF channel"))
 
 channel.on("packet", (data) => {
-  //console.log("Received openseeface packet: ", data);
+  if(DEBUG) {
+    //console.log("Received openseeface packet: ", data);
+  }
   trackerQuaternion = new THREE.Quaternion(data.quaternion.x, data.quaternion.y, data.quaternion.z, data.quaternion.w);
 
-  // const swappedTracker = new THREE.Quaternion().copy(trackerQuaternion)
-  //   .multiply(swapQuat)  // swaps the axes in the tracker space
-  //   .normalize();
-
-  // const corrected = new THREE.Quaternion().copy(correction).multiply(trackerQuaternion).normalize();
-
-  // const eOsf = new THREE.Euler().setFromQuaternion(trackerQuaternion, 'XYZ');
-  // const eCorr = new THREE.Euler().setFromQuaternion(corrected, 'XYZ');
-  // console.log("OSF Euler XYZ: ", rad2Deg(eOsf.x), rad2Deg(eOsf.y), rad2Deg(eOsf.z));
-  // console.log("Corrected Euler XYZ: ", rad2Deg(eCorr.x), rad2Deg(eCorr.y), rad2Deg(eCorr.z));
-  // targetQuat.copy(correction)
-  //   .multiply(trackerQuaternion)
-  //   //.multiply(swapQuat)
-  //   .normalize();
   targetQuat.copy(trackerQuaternion).multiply(correction).normalize();
 });
