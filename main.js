@@ -23,7 +23,7 @@ scene.background = new THREE.Color(0x00ff00);
 const ambient = new THREE.AmbientLight(0x222222, 4);
 scene.add(ambient);
 
-const light = new THREE.DirectionalLight(0xffffff, 0.5);
+const light = new THREE.DirectionalLight(0xffffff, 3);
 light.position.set(0, 0, 6);
 scene.add(light);
 
@@ -40,16 +40,28 @@ let burgerModel;
 
 // bones
 let headBone;
+let morphDict;
+let morphInfluences;
 
-loader.load('./public/hamburger_salaryman_rigged.glb', (gltf) => {
+loader.load('/hamburger_salaryman_rigged_w_shape_keys.glb', (gltf) => {
   burgerModel = gltf.scene;
   scene.add(burgerModel);
 
+  let mesh;
   burgerModel.traverse((child) => {
     if(child.name === 'head') {
       headBone = child;
     }
+    if(child.isMesh && child.name === "Plane002_1") {
+      console.log('found mesh: ', child);
+      mesh = child;
+    }
   });
+  console.log(mesh);
+  morphDict = mesh.morphTargetDictionary;
+  morphInfluences = mesh.morphTargetInfluences;
+  console.log('burgerModel.morphTargetDictionary: ', morphDict);
+  console.log('burgerModel.morphTargetInfluences: ', morphInfluences);
   console.log('headBone: ', headBone.quaternion);
 
   renderer.setAnimationLoop(animate);
@@ -118,6 +130,9 @@ let currentQuat = new THREE.Quaternion();
 
 const slerpFactor = 0.20;
 
+let leftEyeOpen;
+let rightEyeOpen;
+
 // quaternion from OSF
 let trackerQuaternion;
 
@@ -176,6 +191,14 @@ const animate = () => {
     }
     labelRenderer.render(scene, camera);
   }
+
+  if(morphInfluences) {
+    morphInfluences[morphDict["l eye"]] = THREE.MathUtils.clamp((1.0 - leftEyeOpen) / (1.0 - 0.65), 0, 1);
+    morphInfluences[morphDict["r eye"]] = THREE.MathUtils.clamp((1.0 - rightEyeOpen) / (1.0 - 0.65), 0, 1);
+
+    console.log("morphInfluences: ", morphInfluences);
+  }
+
   controls.update();
   renderer.render(scene, camera);
 }
@@ -190,8 +213,13 @@ channel.join()
 
 channel.on("packet", (data) => {
   if(DEBUG) {
-    //console.log("Received openseeface packet: ", data);
+  console.log("Received openseeface packet: ", data.rightEyeOpen);
+  console.log("Received openseeface packet: ", data.leftEyeOpen);
   }
+
+  rightEyeOpen = data.rightEyeOpen;
+  leftEyeOpen = data.leftEyeOpen;
+
   trackerQuaternion = new THREE.Quaternion(data.quaternion.x, data.quaternion.y, data.quaternion.z, data.quaternion.w);
 
   targetQuat.copy(trackerQuaternion).multiply(correction).normalize();
