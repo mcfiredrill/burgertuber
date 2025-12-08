@@ -1,6 +1,6 @@
 burgertuber
 ------------
-
+![demo gif](https://raw.githubusercontent.com/mcfiredrill/burgertuber/refs/heads/main/burgertuber_demo.gif)
 
 three.js vtuber solution
 
@@ -8,7 +8,7 @@ There are 3 components:
 
 * three.js frontend app
 * openseeface udp <-> websocket bridge - phoenix backend
-* (https://github.com/emilianavt/OpenSeeFace)[openseeface]
+* [https://github.com/emilianavt/OpenSeeFace](openseeface)
 
 # Run frontend
 
