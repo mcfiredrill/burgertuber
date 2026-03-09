@@ -1,8 +1,39 @@
 import * as THREE from 'three';
+import * as CANNON from 'cannon-es'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { Socket } from 'phoenix';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+// Setup our physics world
+const world = new CANNON.World({
+  gravity: new CANNON.Vec3(0, -9.82, 0), // m/s²
+})
+
+// Create a sphere body
+const radius = 1 // m
+const sphereBody = new CANNON.Body({
+  mass: 5, // kg
+  shape: new CANNON.Sphere(radius),
+})
+sphereBody.position.set(10, 10, 0) // m
+sphereBody.velocity.x = -5;
+world.addBody(sphereBody)
+
+// Create a static plane for the ground
+const groundBody = new CANNON.Body({
+  type: CANNON.Body.STATIC, // can also be achieved by setting the mass to 0
+  shape: new CANNON.Plane(),
+})
+groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0) // make it face up
+world.addBody(groundBody)
+
+// burger's static body
+const burgerBody = new CANNON.Body({
+  mass: 1,
+  shape: new CANNON.Sphere(2),
+})
+world.addBody(burgerBody);
 
 const DEBUG = false;
 
@@ -37,11 +68,17 @@ camera.position.set(4, 1, 6);
 
 const loader = new GLTFLoader();
 let burgerModel;
+let goodBeverageModel;
 
 // bones
 let headBone;
 let morphDict;
 let morphInfluences;
+
+const geometry = new THREE.SphereGeometry(1)
+const material = new THREE.MeshNormalMaterial()
+const sphereMesh = new THREE.Mesh(geometry, material)
+//scene.add(sphereMesh)
 
 loader.load('/hamburger_salaryman_rigged_w_shape_keys.glb', (gltf) => {
   burgerModel = gltf.scene;
@@ -65,6 +102,15 @@ loader.load('/hamburger_salaryman_rigged_w_shape_keys.glb', (gltf) => {
   console.log('headBone: ', headBone.quaternion);
 
   renderer.setAnimationLoop(animate);
+
+ }, undefined, function (error) {
+   console.error(error);
+});
+
+loader.load('/good_beverage.glb', (gltf) => {
+  goodBeverageModel = gltf.scene;
+  goodBeverageModel.scale.multiplyScalar( .2 );
+  scene.add(goodBeverageModel);
  }, undefined, function (error) {
    console.error(error);
 });
@@ -181,6 +227,24 @@ function showQuats(trackerQuat) {
   }
 }
 
+function throwGoodBeverage() {
+  // Create a sphere body
+  const radius = 1 // m
+  const sphereBody = new CANNON.Body({
+    mass: 5, // kg
+    shape: new CANNON.Sphere(radius),
+  })
+
+  // TODO rand range position and velocity
+  sphereBody.position.set(10, 10, 0)
+  sphereBody.velocity.x = -5;
+  world.addBody(sphereBody)
+
+  let newGoodBeverageModel = goodBeverageModel.clone();
+  scene.add(newGoodBeverageModel);
+  // need array of models + physics bodies
+}
+
 const animate = () => {
   currentQuat.slerp(targetQuat, slerpFactor);
   headBone.quaternion.copy(currentQuat);
@@ -196,8 +260,26 @@ const animate = () => {
     morphInfluences[morphDict["l eye"]] = THREE.MathUtils.clamp((1.0 - leftEyeOpen) / (1.0 - 0.65), 0, 1);
     morphInfluences[morphDict["r eye"]] = THREE.MathUtils.clamp((1.0 - rightEyeOpen) / (1.0 - 0.65), 0, 1);
 
-    console.log("morphInfluences: ", morphInfluences);
+    //console.log("morphInfluences: ", morphInfluences);
   }
+
+  world.fixedStep();
+
+  // sync physics to our meshes
+  sphereMesh.position.copy(burgerBody.position);
+  sphereMesh.quaternion.copy(burgerBody.quaternion);
+  //
+
+  if(goodBeverageModel) {
+    goodBeverageModel.position.copy(sphereBody.position);
+    goodBeverageModel.quaternion.copy(sphereBody.quaternion);
+  }
+  // TODO loop over thrown objects
+
+  burgerBody.position.copy(burgerModel.position);
+
+  // the sphere y position shows the sphere falling
+  //console.log(`Sphere y position: ${sphereBody.position.y}`)
 
   controls.update();
   renderer.render(scene, camera);
@@ -211,10 +293,15 @@ channel.join()
   .receive("ok", () => console.log("Joined OSF channel"))
   .receive("error", () => console.log("Failed to join OSF channel"))
 
+channel.on("good_beverage", (data) => {
+  // throw good beverage
+  throwGoodBeverage();
+});
+
 channel.on("packet", (data) => {
   if(DEBUG) {
-  console.log("Received openseeface packet: ", data.rightEyeOpen);
-  console.log("Received openseeface packet: ", data.leftEyeOpen);
+    console.log("Received openseeface packet: ", data.rightEyeOpen);
+    console.log("Received openseeface packet: ", data.leftEyeOpen);
   }
 
   rightEyeOpen = data.rightEyeOpen;

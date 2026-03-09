@@ -13,6 +13,7 @@ defmodule OsfBridge.Application do
       {DNSCluster, query: Application.get_env(:osf_bridge, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: OsfBridge.PubSub},
       {OsfBridge.UdpListener, port: 12000},
+      # {OsfBridge.WebSocket, []},
       # Start a worker by calling: OsfBridge.Worker.start_link(arg)
       # {OsfBridge.Worker, arg},
       # Start to serve requests, typically the last entry

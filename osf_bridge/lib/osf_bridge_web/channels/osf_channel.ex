@@ -4,11 +4,18 @@ defmodule OsfBridgeWeb.OSFChannel do
   @impl true
   def join("osf", payload, socket) do
     Phoenix.PubSub.subscribe(OsfBridge.PubSub, "osf_bridge:packets")
+    Phoenix.PubSub.subscribe(OsfBridge.PubSub, "osf_bridge:twitch_redeem")
     {:ok, socket}
   end
 
   def handle_info({:osf_packet, parsed}, socket) do
     push(socket, "packet", parsed)
+    {:noreply, socket}
+  end
+
+  def handle_info({:twitch_redeem, payload}, socket) do
+    # TODO check if redeem type is good_beverage throw
+    push(socket, "good_beverage", "ok")
     {:noreply, socket}
   end
 
