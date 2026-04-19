@@ -37,6 +37,8 @@ world.addBody(burgerBody);
 
 const DEBUG = false;
 
+const ENABLE_FACE_TRACKING = false;
+
 //utils
 function deg2Rad(degrees) {
   //return degrees * (Math.PI / 180);
@@ -176,8 +178,8 @@ let currentQuat = new THREE.Quaternion();
 
 const slerpFactor = 0.20;
 
-let leftEyeOpen;
-let rightEyeOpen;
+let leftEyeOpen = 1.0;
+let rightEyeOpen = 1.0;
 
 // quaternion from OSF
 let trackerQuaternion;
@@ -285,29 +287,31 @@ const animate = () => {
   renderer.render(scene, camera);
 }
 
-let socket = new Socket("http://localhost:4000/socket")
-socket.connect()
+if(ENABLE_FACE_TRACKING) {
+  let socket = new Socket("http://localhost:4000/socket")
+  socket.connect()
 
-let channel = socket.channel("osf", {});
-channel.join()
-  .receive("ok", () => console.log("Joined OSF channel"))
-  .receive("error", () => console.log("Failed to join OSF channel"))
+  let channel = socket.channel("osf", {});
+  channel.join()
+    .receive("ok", () => console.log("Joined OSF channel"))
+    .receive("error", () => console.log("Failed to join OSF channel"))
 
-channel.on("good_beverage", (data) => {
-  // throw good beverage
-  throwGoodBeverage();
-});
+  channel.on("good_beverage", (data) => {
+    // throw good beverage
+    throwGoodBeverage();
+  });
 
-channel.on("packet", (data) => {
-  if(DEBUG) {
-    console.log("Received openseeface packet: ", data.rightEyeOpen);
-    console.log("Received openseeface packet: ", data.leftEyeOpen);
-  }
+  channel.on("packet", (data) => {
+    if(DEBUG) {
+      console.log("Received openseeface packet: ", data.rightEyeOpen);
+      console.log("Received openseeface packet: ", data.leftEyeOpen);
+    }
 
-  rightEyeOpen = data.rightEyeOpen;
-  leftEyeOpen = data.leftEyeOpen;
+    rightEyeOpen = data.rightEyeOpen;
+    leftEyeOpen = data.leftEyeOpen;
 
-  trackerQuaternion = new THREE.Quaternion(data.quaternion.x, data.quaternion.y, data.quaternion.z, data.quaternion.w);
+    trackerQuaternion = new THREE.Quaternion(data.quaternion.x, data.quaternion.y, data.quaternion.z, data.quaternion.w);
 
-  targetQuat.copy(trackerQuaternion).multiply(correction).normalize();
-});
+    targetQuat.copy(trackerQuaternion).multiply(correction).normalize();
+  });
+}
