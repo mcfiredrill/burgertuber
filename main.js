@@ -5,6 +5,27 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { Socket } from 'phoenix';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 
+import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
+
+
+let faceLandmarker;
+
+async function initFaceTracking() {
+  const vision = await FilesetResolver.forVisionTasks(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm"
+  );
+
+  faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+    baseOptions: {
+      modelAssetPath: "https://storage.googleapis.com/mediapipe-assets/face_landmarker.task"
+    },
+    runningMode: "VIDEO",
+    outputFaceBlendshapes: true,
+    outputFacialTransformationMatrixes: true,
+    numFaces: 1
+  });
+}
+
 // Setup our physics world
 const world = new CANNON.World({
   gravity: new CANNON.Vec3(0, -9.82, 0), // m/s²
@@ -37,7 +58,7 @@ world.addBody(burgerBody);
 
 const DEBUG = false;
 
-const ENABLE_FACE_TRACKING = false;
+const ENABLE_FACE_TRACKING = true;
 
 //utils
 function deg2Rad(degrees) {
