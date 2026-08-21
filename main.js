@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es'
+import CannonDebugger from 'cannon-es-debugger';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { Socket } from 'phoenix';
@@ -14,7 +15,7 @@ const world = new CANNON.World({
 const radius = 1 // m
 const sphereBody = new CANNON.Body({
   mass: 5, // kg
-  shape: new CANNON.Sphere(radius),
+  shape: new CANNON.Cylinder(0.5, 0.5, 1.5, 16),
 })
 sphereBody.position.set(10, 10, 0) // m
 sphereBody.velocity.x = -5;
@@ -31,13 +32,13 @@ world.addBody(groundBody)
 // burger's static body
 const burgerBody = new CANNON.Body({
   mass: 1,
-  shape: new CANNON.Sphere(2),
+  shape: new CANNON.Cylinder(1, 1, 4, 8),
 })
 world.addBody(burgerBody);
 
 const DEBUG = false;
 
-const ENABLE_FACE_TRACKING = false;
+const ENABLE_FACE_TRACKING = true;
 
 //utils
 function deg2Rad(degrees) {
@@ -52,6 +53,19 @@ function rad2Deg(r){
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x00ff00);
 
+const cannonDebugger = new CannonDebugger(scene, world, {
+  color: 0x660066
+  // onInit(body, mesh) {
+  //   gui.onChange((value) => {
+  //     if (value) {
+  //       mesh.visible = true
+  //     } else {
+  //       mesh.visible = false
+  //     }
+  //   })
+  // }
+})
+//
 //lights
 const ambient = new THREE.AmbientLight(0x222222, 4);
 scene.add(ambient);
@@ -234,12 +248,12 @@ function throwGoodBeverage() {
   const radius = 1 // m
   const sphereBody = new CANNON.Body({
     mass: 5, // kg
-    shape: new CANNON.Sphere(radius),
+    shape: new CANNON.Cylinder(0.5, 0.5, 1, 8),
   })
 
   // TODO rand range position and velocity
-  sphereBody.position.set(10, 10, 0)
-  sphereBody.velocity.x = -5;
+  sphereBody.position.set(-10, -10, 0)
+  sphereBody.velocity.x = -15;
   world.addBody(sphereBody)
 
   let newGoodBeverageModel = goodBeverageModel.clone();
@@ -279,11 +293,13 @@ const animate = () => {
   // TODO loop over thrown objects
 
   burgerBody.position.copy(burgerModel.position);
+  burgerBody.quaternion.copy(burgerModel.quaternion);
 
   // the sphere y position shows the sphere falling
   //console.log(`Sphere y position: ${sphereBody.position.y}`)
 
   controls.update();
+  cannonDebugger.update() // Update the CannonDebugger meshes
   renderer.render(scene, camera);
 }
 
