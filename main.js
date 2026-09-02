@@ -11,16 +11,6 @@ const world = new CANNON.World({
   gravity: new CANNON.Vec3(0, -9.82, 0), // m/s²
 })
 
-// Create a sphere body
-const radius = 1 // m
-const sphereBody = new CANNON.Body({
-  mass: 5, // kg
-  shape: new CANNON.Cylinder(0.5, 0.5, 1.5, 16),
-})
-sphereBody.position.set(10, 10, 0) // m
-sphereBody.velocity.x = -5;
-world.addBody(sphereBody)
-
 // Create a static plane for the ground
 const groundBody = new CANNON.Body({
   type: CANNON.Body.STATIC, // can also be achieved by setting the mass to 0
@@ -44,10 +34,6 @@ const ENABLE_FACE_TRACKING = true;
 function deg2Rad(degrees) {
   //return degrees * (Math.PI / 180);
   return THREE.MathUtils.degToRad(degrees);
-}
-
-function rad2Deg(r){
-  return THREE.MathUtils.radToDeg(r);
 }
 
 const scene = new THREE.Scene();
@@ -85,6 +71,8 @@ camera.position.set(4, 1, 6);
 const loader = new GLTFLoader();
 let burgerModel;
 let goodBeverageModel;
+const thrownBeverages = [];
+let queuedBeverageThrows = 0;
 
 // bones
 let headBone;
@@ -117,6 +105,7 @@ loader.load('/hamburger_salaryman_rigged_w_shape_keys.glb', (gltf) => {
   console.log('burgerModel.morphTargetInfluences: ', morphInfluences);
   console.log('headBone: ', headBone.quaternion);
 
+  flushQueuedBeverageThrows();
   renderer.setAnimationLoop(animate);
 
  }, undefined, function (error) {
@@ -126,7 +115,8 @@ loader.load('/hamburger_salaryman_rigged_w_shape_keys.glb', (gltf) => {
 loader.load('/good_beverage.glb', (gltf) => {
   goodBeverageModel = gltf.scene;
   goodBeverageModel.scale.multiplyScalar( .2 );
-  scene.add(goodBeverageModel);
+
+  flushQueuedBeverageThrows();
  }, undefined, function (error) {
    console.error(error);
 });
@@ -179,12 +169,6 @@ const correction = new THREE.Quaternion()
     new THREE.Euler(
       deg2Rad(180), 0, deg2Rad(-90)
     )
-  );
-
-// // another quat we use to swap pitch/yaw
-const swapQuat = new THREE.Quaternion()
-  .setFromEuler(
-    new THREE.Euler(0, 0, deg2Rad(90))
   );
 
 let targetQuat = new THREE.Quaternion();
@@ -244,21 +228,59 @@ function showQuats(trackerQuat) {
 }
 
 function throwGoodBeverage() {
-  // Create a sphere body
-  const radius = 1 // m
-  const sphereBody = new CANNON.Body({
-    mass: 5, // kg
-    shape: new CANNON.Cylinder(0.5, 0.5, 1, 8),
-  })
+  // A redeem can arrive while the GLB is still loading. Preserve it instead of
+  // silently dropping the viewer's throw.
+  if(!goodBeverageModel || !burgerModel) {
+    queuedBeverageThrows += 1;
+    return;
+  }
 
-  // TODO rand range position and velocity
-  sphereBody.position.set(-10, -10, 0)
-  sphereBody.velocity.x = -15;
-  world.addBody(sphereBody)
+  const body = new CANNON.Body({
+    mass: 1,
+    shape: new CANNON.Cylinder(0.3, 0.3, 0.8, 12),
+  });
 
-  let newGoodBeverageModel = goodBeverageModel.clone();
-  scene.add(newGoodBeverageModel);
-  // need array of models + physics bodies
+  const throwFromLeft = Math.random() < 0.5;
+  const start = new CANNON.Vec3(
+    burgerBody.position.x + (throwFromLeft ? -8 : 8),
+    burgerBody.position.y + 2 + Math.random() * 2,
+    burgerBody.position.z + (Math.random() - 0.5) * 2,
+  );
+  const target = new CANNON.Vec3(
+    burgerBody.position.x,
+    burgerBody.position.y + 1.5,
+    burgerBody.position.z,
+  );
+  const flightTime = 0.65;
+
+  body.position.copy(start);
+  body.velocity.set(
+    (target.x - start.x) / flightTime,
+    (target.y - start.y - 0.5 * world.gravity.y * flightTime ** 2) / flightTime,
+    (target.z - start.z) / flightTime,
+  );
+  body.angularVelocity.set(
+    (Math.random() - 0.5) * 12,
+    (Math.random() - 0.5) * 12,
+    (Math.random() - 0.5) * 12,
+  );
+  world.addBody(body);
+
+  const model = goodBeverageModel.clone(true);
+  model.position.copy(body.position);
+  model.quaternion.copy(body.quaternion);
+  scene.add(model);
+  thrownBeverages.push({ body, model, createdAt: performance.now() });
+}
+
+function flushQueuedBeverageThrows() {
+  if(!goodBeverageModel || !burgerModel) return;
+
+  const throwsToCreate = queuedBeverageThrows;
+  queuedBeverageThrows = 0;
+  for(let index = 0; index < throwsToCreate; index += 1) {
+    throwGoodBeverage();
+  }
 }
 
 const animate = () => {
@@ -286,11 +308,18 @@ const animate = () => {
   sphereMesh.quaternion.copy(burgerBody.quaternion);
   //
 
-  if(goodBeverageModel) {
-    goodBeverageModel.position.copy(sphereBody.position);
-    goodBeverageModel.quaternion.copy(sphereBody.quaternion);
+  const now = performance.now();
+  for(let index = thrownBeverages.length - 1; index >= 0; index -= 1) {
+    const beverage = thrownBeverages[index];
+    beverage.model.position.copy(beverage.body.position);
+    beverage.model.quaternion.copy(beverage.body.quaternion);
+
+    if(now - beverage.createdAt > 10_000 || beverage.body.position.y < -10) {
+      world.removeBody(beverage.body);
+      scene.remove(beverage.model);
+      thrownBeverages.splice(index, 1);
+    }
   }
-  // TODO loop over thrown objects
 
   burgerBody.position.copy(burgerModel.position);
   burgerBody.quaternion.copy(burgerModel.quaternion);
@@ -312,7 +341,7 @@ if(ENABLE_FACE_TRACKING) {
     .receive("ok", () => console.log("Joined OSF channel"))
     .receive("error", () => console.log("Failed to join OSF channel"))
 
-  channel.on("good_beverage", (data) => {
+  channel.on("good_beverage", () => {
     // throw good beverage
     throwGoodBeverage();
   });

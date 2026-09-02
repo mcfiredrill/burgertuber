@@ -20,6 +20,11 @@ if System.get_env("PHX_SERVER") do
   config :osf_bridge, OsfBridgeWeb.Endpoint, server: true
 end
 
+config :osf_bridge,
+  good_beverage_reward_id: System.get_env("TWITCH_GOOD_BEVERAGE_REWARD_ID"),
+  good_beverage_reward_title:
+    System.get_env("TWITCH_GOOD_BEVERAGE_REWARD_TITLE") || "Good Beverage"
+
 if config_env() == :prod do
   database_url =
     System.get_env("DATABASE_URL") ||

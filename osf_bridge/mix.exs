@@ -61,7 +61,7 @@ defmodule OsfBridge.MixProject do
       {:jason, "~> 1.2"},
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
-      {:websockex, "~> 0.4.3"},
+      {:websockex, "~> 0.4.3"}
     ]
   end
 
@@ -76,7 +76,6 @@ defmodule OsfBridge.MixProject do
       setup: ["deps.get", "ecto.setup", "assets.setup", "assets.build"],
       "ecto.setup": ["ecto.create", "ecto.migrate", "run priv/repo/seeds.exs"],
       "ecto.reset": ["ecto.drop", "ecto.setup"],
-      test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],
       "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
       "assets.build": ["compile", "tailwind osf_bridge", "esbuild osf_bridge"],
       "assets.deploy": [

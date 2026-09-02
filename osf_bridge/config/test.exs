@@ -1,5 +1,7 @@
 import Config
 
+config :osf_bridge, start_twitch: false
+
 # Configure your database
 #
 # The MIX_TEST_PARTITION environment variable can be used

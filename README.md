@@ -28,6 +28,10 @@ mix deps.get
 mix phx.server
 ```
 
+Set `TWITCH_GOOD_BEVERAGE_REWARD_ID` to the ID of the Twitch custom reward that
+should throw the beverage. If it is not set, the bridge matches a reward named
+`Good Beverage`; override that fallback with `TWITCH_GOOD_BEVERAGE_REWARD_TITLE`.
+
 # Get and run openseeface
 
 Follow instructions on the [https://github.com/emilianavt/OpenSeeFace?tab=readme-ov-file#usage](OpenSeeFace repo)

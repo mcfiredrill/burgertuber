@@ -1,2 +1,5 @@
 ExUnit.start()
-Ecto.Adapters.SQL.Sandbox.mode(OsfBridge.Repo, :manual)
+
+if Process.whereis(OsfBridge.Repo) do
+  Ecto.Adapters.SQL.Sandbox.mode(OsfBridge.Repo, :manual)
+end

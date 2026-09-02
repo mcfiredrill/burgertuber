@@ -1,115 +1,137 @@
 defmodule OsfBridge.WebSocket do
   use WebSockex
+
   require Logger
 
+  @event_type "channel.channel_points_custom_reward_redemption.add"
   @pubsub_topic "osf_bridge:twitch_redeem"
+  @url "wss://eventsub.wss.twitch.tv/ws"
 
   def start_link(state) do
-    WebSockex.start_link(
-      "wss://eventsub.wss.twitch.tv/ws",
-      __MODULE__,
-      state,
-      name: __MODULE__
+    Logger.info("Connecting to Twitch EventSub WebSocket")
+    WebSockex.start_link(@url, __MODULE__, state, name: __MODULE__)
+  end
+
+  def start(state) do
+    WebSockex.start(@url, __MODULE__, state, name: __MODULE__)
+  end
+
+  @impl true
+  def handle_connect(_conn, state) do
+    Logger.info("Connected to Twitch EventSub; waiting for session welcome")
+    {:ok, state}
+  end
+
+  @impl true
+  def handle_disconnect(disconnect_map, state) do
+    Logger.warning("Disconnected from Twitch EventSub: #{inspect(disconnect_map)}")
+    {:reconnect, state}
+  end
+
+  @impl true
+  def handle_frame({:text, message}, state) do
+    case Jason.decode(message) do
+      {:ok, payload} ->
+        handle_message(payload)
+
+      {:error, error} ->
+        Logger.warning("Could not decode Twitch EventSub message: #{inspect(error)}")
+    end
+
+    {:ok, state}
+  end
+
+  def handle_frame({_type, _message}, state), do: {:ok, state}
+
+  defp handle_message(%{
+         "metadata" => %{"message_type" => "session_welcome"},
+         "payload" => %{"session" => %{"id" => session_id}}
+       }) do
+    Logger.info("Twitch EventSub session established; creating channel-points subscription")
+    subscribe(session_id)
+  end
+
+  defp handle_message(%{
+         "metadata" => %{
+           "message_type" => "notification",
+           "subscription_type" => @event_type
+         },
+         "payload" => %{"event" => event}
+       }) do
+    reward = event["reward"] || %{}
+
+    Logger.info(
+      "Received Twitch redemption: reward_title=#{inspect(reward["title"])} " <>
+        "reward_id=#{inspect(reward["id"])} user=#{inspect(event["user_login"])}"
+    )
+
+    Phoenix.PubSub.broadcast(
+      OsfBridge.PubSub,
+      @pubsub_topic,
+      {:twitch_redeem, event}
     )
   end
 
-  # def handle_frame({type, msg}, state) do
-  #   IO.puts "Received WS Message - Type: #{inspect type} -- Message: #{inspect msg}"
-  #   # pull out session ID
-  #   {:ok, json } = Jason.decode(msg)
-  #   message_type = json["metadata"]["message_type"]
-  #   case message_type do
-  #     "session_welcome" ->
-  #       session_id = json["payload"]["session"]["id"]
-  #       # create subscriptions with it (POST)
-  #       subscribe "channel.channel_points_custom_reward_redemption.add", session_id
-  #       # subscribe "channel.follow", session_id
-  #       # subscribe "channel.raid", session_id
-  #       # TODO
-  #       # subscribe "channel.subscribe", session_id
-  #       # subscribe "channel.subscription.gift", session_id
-  #       # subscribe "channel.cheer", session_id
-  #       # subscribe "channel.channel_points_custom_reward_redemption.add", session_id
-  #     "notification" ->
-  #       Logger.debug "got a notification"
-  #       subscription_type = json["metadata"]["subscription_type"]
-  #       Logger.debug "subscription_type: #{subscription_type}"
-  #       case subscription_type do
-  #         "channel.channel_points_custom_reward_redemption.add" ->
-  #           # TODO
-  #           Phoenix.PubSub.broadcast(OsfBridge.PubSub, @pubsub_topic, {:twitch_redeem, json["payload"]["event"]})
-  #         # "channel.follow" ->
-  #         #   notify_new_follower json["payload"]["event"]
-  #         # "channel.raid" ->
-  #         #   notify_raid json["payload"]["event"]
-  #         _ ->
-  #           Logger.debug "no handler for notification type: #{subscription_type}"
-  #       end
-  #     _ ->
-  #       Logger.debug "unknown websocket message type: #{message_type}"
-  #   end
-  #   {:ok, state}
-  # end
-  #
-  # def handle_cast({:send, {type, msg} = frame}, state) do
-  #   IO.puts "Sending #{type} frame with payload: #{msg}"
-  #   {:reply, frame, state}
-  # end
-  #
-  # defp subscribe(event_type, session_id) do
-  #   url = "https://api.twitch.tv/helix/eventsub/subscriptions"
-  #   version = event_version(event_type)
-  #   condition = event_condition(event_type)
-  #   text = %{
-  #     type: event_type,
-  #     version: version,
-  #     condition: condition,
-  #     transport: %{
-  #       method: "websocket",
-  #       session_id: session_id
-  #     }
-  #
-  #   }
-  #   {:ok, body } = Jason.encode(text)
-  #   headers = [
-  #     {"Authorization", "Bearer #{System.get_env("TWITCH_OAUTH_TOKEN")}"},
-  #     {"Client-Id", System.get_env("TWITCH_CLIENT_ID")},
-  #     {"Content-Type", "application/json"},
-  #   ]
-  #   {:ok, response } = HTTPoison.post url, body, headers
-  #   Logger.debug(inspect response)
-  # end
-  #
-  # defp event_version(event_type) do
-  #   case event_type do
-  #     "channel.follow" ->
-  #       2
-  #     "channel.raid" ->
-  #       1
-  #     "channel.channel_points_custom_reward_redemption.add" ->
-  #       1
-  #     _ ->
-  #       Logger.debug "unknown version for event type: #{event_type}"
-  #   end
-  # end
-  #
-  # defp event_condition(event_type) do
-  #   case event_type do
-  #     "channel.follow" ->
-  #       %{
-  #         broadcaster_user_id: System.get_env("TWITCH_BROADCASTER_ID"),
-  #         moderator_user_id: System.get_env("TWITCH_BROADCASTER_ID")
-  #       }
-  #     "channel.raid" ->
-  #       %{
-  #         to_broadcaster_user_id: System.get_env("TWITCH_BROADCASTER_ID")
-  #       }
-  #     "channel.channel_points_custom_reward_redemption.add" ->
-  #       %{
-  #         broadcaster_user_id: System.get_env("TWITCH_BROADCASTER_ID")
-  #       }
-  #     _ ->
-  #       Logger.debug "unknown condition for event type: #{event_type}"
-  #   end
-  # end
+  defp handle_message(%{"metadata" => %{"message_type" => "session_keepalive"}}), do: :ok
+
+  defp handle_message(%{"metadata" => %{"message_type" => message_type}}) do
+    Logger.debug("Received Twitch EventSub message: #{message_type}")
+  end
+
+  defp handle_message(message) do
+    Logger.debug("Received unrecognized Twitch EventSub message: #{inspect(message)}")
+  end
+
+  defp subscribe(session_id) do
+    client_id = System.get_env("TWITCH_CLIENT_ID")
+    oauth_token = System.get_env("TWITCH_OAUTH_TOKEN")
+    broadcaster_id = System.get_env("TWITCH_BROADCASTER_ID")
+
+    missing =
+      [
+        {"TWITCH_CLIENT_ID", client_id},
+        {"TWITCH_OAUTH_TOKEN", oauth_token},
+        {"TWITCH_BROADCASTER_ID", broadcaster_id}
+      ]
+      |> Enum.filter(fn {_name, value} -> is_nil(value) or value == "" end)
+      |> Enum.map_join(", ", &elem(&1, 0))
+
+    if missing == "" do
+      create_subscription(session_id, client_id, oauth_token, broadcaster_id)
+    else
+      Logger.error(
+        "Cannot subscribe to Twitch EventSub; missing environment variables: #{missing}"
+      )
+    end
+  end
+
+  defp create_subscription(session_id, client_id, oauth_token, broadcaster_id) do
+    body = %{
+      type: @event_type,
+      version: "1",
+      condition: %{broadcaster_user_id: broadcaster_id},
+      transport: %{method: "websocket", session_id: session_id}
+    }
+
+    headers = [
+      {"authorization", "Bearer #{oauth_token}"},
+      {"client-id", client_id}
+    ]
+
+    case Req.post("https://api.twitch.tv/helix/eventsub/subscriptions",
+           json: body,
+           headers: headers
+         ) do
+      {:ok, %Req.Response{status: status}} when status in 200..299 ->
+        Logger.info("Twitch channel-points subscription created successfully (HTTP #{status})")
+
+      {:ok, %Req.Response{status: status, body: response_body}} ->
+        Logger.error(
+          "Twitch rejected the channel-points subscription (HTTP #{status}): #{inspect(response_body)}"
+        )
+
+      {:error, error} ->
+        Logger.error("Twitch subscription request failed: #{Exception.message(error)}")
+    end
+  end
 end
